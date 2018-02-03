@@ -1,0 +1,109 @@
+#####################################################################
+#                       Happy Planet Index                          #
+#                          Draft Graphs                             #
+#                         Addison Larson                            #
+#                            2/1/2018                               #
+#####################################################################
+
+library(foreign) # Reads .csv files and the like
+library(ggplot2) # Makes cool charts
+library(RColorBrewer) # Color schemes for charts
+
+# Read in the "Happy Planet Index"
+setwd("C:/Users/lngov/OneDrive/Pictures/Documents")
+happy2016 <- read.csv("happy 2016.csv")
+
+# A bunch of vars are useless; only keeping what I want
+keepvars <- c("Country","Happy.Planet.Index","Region","Population")
+happy20162 <- happy2016[keepvars]
+
+# Rename vars to user-friendly names
+colnames(happy20162) <- c("Country","HPI","Region","Population")
+
+# How many regions do we have? 6
+unique(happy20162$Region)
+
+# Aggregate levels by region to get a regional average happiness
+regionclust <- aggregate(happy20162$HPI, by = list(happy20162$Region), 
+                         FUN = mean, na.rm = TRUE)
+
+# Plot out average regional happiness for starters
+colnames(regionclust) <- c("Region","HPI")
+plot1 <- ggplot(data = regionclust, aes(Region, HPI))
+plot1 + geom_bar(stat = "identity")
+
+# Looks ugly. Let's sort tallest to shortest and then plot
+regionclust$Region <- as.factor(regionclust$Region)
+regionclust$Region <- factor(regionclust$Region, levels = regionclust$Region[order(-regionclust$HPI)])
+plot2 <- ggplot(data = regionclust, aes(Region, HPI)) + ggtitle("Average Happiness by Region")
+plot2 + geom_bar(stat = "identity")
+
+# The above plot is weighted for the number of countries in each region,
+# But the population of each country is ignored.
+# Let's add this to the mix:
+happy20162$PopHPI <- happy20162$Population * happy20162$HPI # Weight each HPI by country population
+
+# YUCK! We have commas in our population, making this not work.
+happy20162[,"Population"] <- gsub(",","",happy20162[,"Population"])
+happy20162$Population <- as.numeric(happy20162$Population)
+
+happy20162$PopHPI <- happy20162$Population * happy20162$HPI # Weight each HPI by country population
+pophpiclust <- aggregate(happy20162$PopHPI, by = list(happy20162$Region), # Aggregate Weighted HPI by region
+                         FUN = sum, na.rm = TRUE)
+popclust <- aggregate(happy20162$Population, by = list(happy20162$Region),
+                      FUN = sum, na.rm = TRUE)
+regionclust2 <- merge(pophpiclust, popclust, by = "Group.1")
+
+colnames(regionclust2) <- c("Region","HPIxPop","Pop")
+regionclust2$WeightedHPI <- regionclust2$HPIxPop / regionclust2$Pop
+
+# Time to plot!
+regionclust2$Region <- as.factor(regionclust2$Region)
+regionclust2$Region <- factor(regionclust2$Region, levels = regionclust2$Region[order(-regionclust2$WeightedHPI)])
+plot3 <- ggplot(data = regionclust2, aes(Region, WeightedHPI)) + ggtitle("Average Regional Happiness Weighted by Country Population")
+plot3 + geom_bar(stat = "identity")
+
+# Now, let's get away from the aggregate data and try to do a filled bar
+# My vote is to plot all countries in descending HPI,
+# with color designating the Region
+ggplot(happy20162, aes(x = Country, y = HPI, fill = Region)) + geom_bar(stat = "identity")
+
+# TOO COMPLICATED! Maybe let's first try the re-sorting as below
+happy20162$Country <- as.factor(happy20162$Country)
+happy20162$Country <- factor(happy20162$Country, levels = happy20162$Country[order(happy20162$HPI)])
+
+plot4 <- ggplot(happy20162, aes(x = Country,
+                                y = HPI,
+                                fill = Region)) + geom_bar(stat = "identity") + theme(text = element_text(size=7))
+plot4 + coord_flip() + ggtitle("Happiness by Country and Region")
+
+# Still too many values.
+# How about subsetting into thirds?
+happy20162$Country <- factor(happy20162$Country, levels = happy20162$Country[order(-happy20162$HPI)])
+
+bottomthirdcut <- quantile(happy20162$HPI, probs = 0.33)
+middlethirdcut <- quantile(happy20162$HPI, probs = 0.67)
+
+bottomthird <- happy20162[which(happy20162$HPI <= bottomthirdcut),]
+middlethird <- happy20162[which(happy20162$HPI > bottomthirdcut & happy20162$HPI <= middlethirdcut),]
+topthird <- happy20162[which(happy20162$HPI > middlethirdcut),]
+
+plot5 <- ggplot(topthird, aes(x = Country, y = HPI, fill = Region))+ geom_bar(
+  stat = "identity") + theme(text = element_text(size=12), axis.text.x = element_text(angle=90, hjust=1))
+plot5 + ggtitle("Happiest Third of Countries by Region")
+
+plot6 <- ggplot(middlethird, aes(x = Country, y = HPI, fill = Region)) + geom_bar(
+  stat = "identity") + theme(text = element_text(size=12), axis.text.x = element_text(angle=90, hjust=1))
+plot6 + ggtitle("Middle Third of Countries by Region")
+
+plot7 <- ggplot(bottomthird, aes(x = Country, y = HPI, fill = Region)) + geom_bar(
+  stat = "identity") + theme(text = element_text(size=12), axis.text.x = element_text(angle=90, hjust=1))
+plot7 + ggtitle("Least Happy Third of Countries by Region")
+
+# One last thing. For all of these, I'd really prefer a cooler color scheme if possible.
+plot2 + geom_bar(stat = "identity") + scale_fill_brewer(palette = "Dark2")
+plot3 + geom_bar(stat = "identity") + scale_fill_brewer(palette = "Dark2")
+plot4 + coord_flip() + ggtitle("Happiness by Country and Region") + scale_fill_brewer(palette = "Dark2")
+plot5 + ggtitle("Happiest Third of Countries by Region") + scale_fill_brewer(palette = "Dark2")
+plot6 + ggtitle("Middle Third of Countries by Region") + scale_fill_brewer(palette = "Dark2")
+plot7 + ggtitle("Least Happy Third of Countries by Region") + scale_fill_brewer(palette = "Dark2")
